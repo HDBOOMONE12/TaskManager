@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
 	"github.com/HDBOOMONE12/TaskManager/internal/service"
 	"net/http"
@@ -23,32 +22,22 @@ func UsersHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		list := service.ListUsers()
-		respUsers := make([]UserResponse, 0, len(list))
-		for _, user := range list {
-			respUsers = append(respUsers, UserResponse{
-				ID: user.ID, Name: user.Name, Email: user.Email,
-			})
+		resp := make([]UserResponse, 0, len(list))
+		for _, u := range list {
+			resp = append(resp, UserResponse{ID: u.ID, Name: u.Name, Email: u.Email})
 		}
-		writeJSON(w, http.StatusOK, respUsers)
+		writeJSON(w, http.StatusOK, resp)
 
 	case http.MethodPost:
-		contentType := r.Header.Get("Content-Type")
-		if !strings.HasPrefix(contentType, "application/json") {
+		ct := r.Header.Get("Content-Type")
+		if !strings.HasPrefix(ct, "application/json") {
 			errorJSON(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
 			return
 		}
 
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-
 		var req CreateUserRequest
-		dec := json.NewDecoder(r.Body)
-		dec.DisallowUnknownFields()
-		if err := dec.Decode(&req); err != nil {
-			if strings.Contains(err.Error(), "request body too large") {
-				errorJSON(w, http.StatusRequestEntityTooLarge, "request body too large")
-				return
-			}
-			errorJSON(w, http.StatusBadRequest, "invalid JSON")
+		if err := decodeJSON(w, r, &req, 1<<20); err != nil {
+			respondDecodeError(w, err)
 			return
 		}
 
@@ -58,13 +47,11 @@ func UsersHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		u := service.CreateUser(req.Name, req.Email)
-		writeJSON(w, http.StatusCreated, UserResponse{
-			ID: u.ID, Name: u.Name, Email: u.Email,
-		})
+		writeJSON(w, http.StatusCreated, UserResponse{ID: u.ID, Name: u.Name, Email: u.Email})
+
 	default:
 		w.Header().Set("Allow", "GET, POST")
 		errorJSON(w, http.StatusMethodNotAllowed, "method not allowed")
-
 	}
 }
 
@@ -90,16 +77,116 @@ func UserDetailHandler(w http.ResponseWriter, r *http.Request) {
 			errorJSON(w, http.StatusNotFound, "user not found")
 			return
 		}
+		writeJSON(w, http.StatusOK, UserResponse{ID: u.ID, Name: u.Name, Email: u.Email})
+		return
 
-		writeJSON(w, http.StatusOK, UserResponse{
-			ID: u.ID, Name: u.Name, Email: u.Email,
-		})
+	case http.MethodPut:
+		ct := r.Header.Get("Content-Type")
+		if !strings.HasPrefix(ct, "application/json") {
+			errorJSON(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+			return
+		}
+
+		var req CreateUserRequest
+		if err := decodeJSON(w, r, &req, 1<<20); err != nil {
+			respondDecodeError(w, err)
+			return
+		}
+		if req.Name == "" || req.Email == "" {
+			errorJSON(w, http.StatusBadRequest, "missing name or email")
+			return
+		}
+
+		id, perr := parseUserID(r)
+		if perr != nil {
+			if errors.Is(perr, errBadPath) {
+				http.NotFound(w, r)
+				return
+			}
+			if errors.Is(perr, errBadID) {
+				errorJSON(w, http.StatusBadRequest, "invalid id")
+				return
+			}
+			errorJSON(w, http.StatusBadRequest, "bad request")
+			return
+		}
+
+		u, ok := service.UpdateUserByID(id, req.Name, req.Email)
+		if !ok {
+			errorJSON(w, http.StatusNotFound, "user not found")
+			return
+		}
+		writeJSON(w, http.StatusOK, UserResponse{ID: u.ID, Name: u.Name, Email: u.Email})
+		return
+
+	case http.MethodPatch:
+		ct := r.Header.Get("Content-Type")
+		if !strings.HasPrefix(ct, "application/json") {
+			errorJSON(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+			return
+		}
+
+		var req struct {
+			Name  *string `json:"name"`
+			Email *string `json:"email"`
+		}
+		if err := decodeJSON(w, r, &req, 1<<20); err != nil {
+			respondDecodeError(w, err)
+			return
+		}
+
+		id, perr := parseUserID(r)
+		if perr != nil {
+			if errors.Is(perr, errBadPath) {
+				http.NotFound(w, r)
+				return
+			}
+			if errors.Is(perr, errBadID) {
+				errorJSON(w, http.StatusBadRequest, "invalid id")
+				return
+			}
+			errorJSON(w, http.StatusBadRequest, "bad request")
+			return
+		}
+
+		if req.Name == nil && req.Email == nil {
+			errorJSON(w, http.StatusBadRequest, "no fields to update")
+			return
+		}
+
+		u, ok := service.PatchUserByID(id, req.Name, req.Email)
+		if !ok {
+			errorJSON(w, http.StatusNotFound, "user not found")
+			return
+		}
+		writeJSON(w, http.StatusOK, UserResponse{ID: u.ID, Name: u.Name, Email: u.Email})
+		return
+
+	case http.MethodDelete:
+		id, perr := parseUserID(r)
+		if perr != nil {
+			if errors.Is(perr, errBadPath) {
+				http.NotFound(w, r)
+				return
+			}
+			if errors.Is(perr, errBadID) {
+				errorJSON(w, http.StatusBadRequest, "invalid id")
+				return
+			}
+			errorJSON(w, http.StatusBadRequest, "bad request")
+			return
+		}
+
+		ok := service.DeleteUserByID(id)
+		if !ok {
+			errorJSON(w, http.StatusNotFound, "user not found")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 		return
 
 	default:
-		w.Header().Set("Allow", "GET")
+		w.Header().Set("Allow", "GET, PUT, PATCH, DELETE")
 		errorJSON(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
 	}
-
 }

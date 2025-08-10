@@ -46,3 +46,43 @@ func GetUserByID(id int) (User, bool) {
 	return u, ok
 
 }
+
+func UpdateUserByID(id int, name, email string) (User, bool) {
+	mu.Lock()
+	defer mu.Unlock()
+	updated, ok := users[id]
+	if !ok {
+		return User{}, false
+	}
+	updated.Name = name
+	updated.Email = email
+	users[id] = updated
+	return updated, true
+}
+func PatchUserByID(id int, name, email *string) (User, bool) {
+	mu.Lock()
+	defer mu.Unlock()
+	updated, ok := users[id]
+	if !ok {
+		return User{}, false
+	}
+	if name != nil {
+		updated.Name = *name
+	}
+	if email != nil {
+		updated.Email = *email
+	}
+	users[id] = updated
+	return updated, true
+}
+
+func DeleteUserByID(id int) bool {
+	mu.Lock()
+	defer mu.Unlock()
+	_, ok := users[id]
+	if !ok {
+		return false
+	}
+	delete(users, id)
+	return true
+}

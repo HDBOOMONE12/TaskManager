@@ -1,11 +1,17 @@
 package service
 
-import "sync"
+import (
+	"errors"
+	"sync"
+)
 
 var (
 	mu     sync.RWMutex
 	users  = make(map[int]User)
 	nextID = 1
+
+	ErrEmptyName  = errors.New("empty name")
+	ErrEmptyEmail = errors.New("empty email")
 )
 
 type User struct {
@@ -14,7 +20,14 @@ type User struct {
 	Email string
 }
 
-func CreateUser(name, email string) User {
+func CreateUser(name, email string) (User, error) {
+	if name == "" {
+		return User{}, ErrEmptyName
+	}
+	if email == "" {
+		return User{}, ErrEmptyEmail
+	}
+
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -25,7 +38,7 @@ func CreateUser(name, email string) User {
 	}
 	users[u.ID] = u
 	nextID++
-	return u
+	return u, nil
 }
 
 func ListUsers() []User {
@@ -42,45 +55,60 @@ func GetUserByID(id int) (User, bool) {
 	mu.RLock()
 	defer mu.RUnlock()
 	u, ok := users[id]
-
 	return u, ok
-
 }
 
-func UpdateUserByID(id int, name, email string) (User, bool) {
+func UpdateUserByID(id int, name, email string) (User, error) {
+	if name == "" {
+		return User{}, ErrEmptyName
+	}
+	if email == "" {
+		return User{}, ErrEmptyEmail
+	}
+
 	mu.Lock()
 	defer mu.Unlock()
-	updated, ok := users[id]
+
+	u, ok := users[id]
 	if !ok {
-		return User{}, false
+		return User{}, ErrUserNotFound
 	}
-	updated.Name = name
-	updated.Email = email
-	users[id] = updated
-	return updated, true
+	u.Name = name
+	u.Email = email
+	users[id] = u
+	return u, nil
 }
-func PatchUserByID(id int, name, email *string) (User, bool) {
+
+func PatchUserByID(id int, name, email *string) (User, error) {
 	mu.Lock()
 	defer mu.Unlock()
-	updated, ok := users[id]
+
+	u, ok := users[id]
 	if !ok {
-		return User{}, false
+		return User{}, ErrUserNotFound
 	}
+
 	if name != nil {
-		updated.Name = *name
+		if *name == "" {
+			return User{}, ErrEmptyName
+		}
+		u.Name = *name
 	}
 	if email != nil {
-		updated.Email = *email
+		if *email == "" {
+			return User{}, ErrEmptyEmail
+		}
+		u.Email = *email
 	}
-	users[id] = updated
-	return updated, true
+
+	users[id] = u
+	return u, nil
 }
 
 func DeleteUserByID(id int) bool {
 	mu.Lock()
 	defer mu.Unlock()
-	_, ok := users[id]
-	if !ok {
+	if _, ok := users[id]; !ok {
 		return false
 	}
 	delete(users, id)

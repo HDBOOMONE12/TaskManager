@@ -41,12 +41,17 @@ func UsersHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if req.Name == "" || req.Email == "" {
-			errorJSON(w, http.StatusBadRequest, "missing name or email")
+		u, err := service.CreateUser(req.Name, req.Email)
+		if err != nil {
+			switch {
+			case errors.Is(err, service.ErrEmptyName), errors.Is(err, service.ErrEmptyEmail):
+				errorJSON(w, http.StatusBadRequest, err.Error())
+			default:
+				errorJSON(w, http.StatusInternalServerError, "internal error")
+			}
 			return
 		}
 
-		u := service.CreateUser(req.Name, req.Email)
 		writeJSON(w, http.StatusCreated, UserResponse{ID: u.ID, Name: u.Name, Email: u.Email})
 
 	default:
@@ -92,10 +97,6 @@ func UserDetailHandler(w http.ResponseWriter, r *http.Request) {
 			respondDecodeError(w, err)
 			return
 		}
-		if req.Name == "" || req.Email == "" {
-			errorJSON(w, http.StatusBadRequest, "missing name or email")
-			return
-		}
 
 		id, perr := parseUserID(r)
 		if perr != nil {
@@ -111,11 +112,19 @@ func UserDetailHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		u, ok := service.UpdateUserByID(id, req.Name, req.Email)
-		if !ok {
-			errorJSON(w, http.StatusNotFound, "user not found")
+		u, err := service.UpdateUserByID(id, req.Name, req.Email)
+		if err != nil {
+			switch {
+			case errors.Is(err, service.ErrUserNotFound):
+				errorJSON(w, http.StatusNotFound, "user not found")
+			case errors.Is(err, service.ErrEmptyName), errors.Is(err, service.ErrEmptyEmail):
+				errorJSON(w, http.StatusBadRequest, err.Error())
+			default:
+				errorJSON(w, http.StatusInternalServerError, "internal error")
+			}
 			return
 		}
+
 		writeJSON(w, http.StatusOK, UserResponse{ID: u.ID, Name: u.Name, Email: u.Email})
 		return
 
@@ -154,11 +163,19 @@ func UserDetailHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		u, ok := service.PatchUserByID(id, req.Name, req.Email)
-		if !ok {
-			errorJSON(w, http.StatusNotFound, "user not found")
+		u, err := service.PatchUserByID(id, req.Name, req.Email)
+		if err != nil {
+			switch {
+			case errors.Is(err, service.ErrUserNotFound):
+				errorJSON(w, http.StatusNotFound, "user not found")
+			case errors.Is(err, service.ErrEmptyName), errors.Is(err, service.ErrEmptyEmail):
+				errorJSON(w, http.StatusBadRequest, err.Error())
+			default:
+				errorJSON(w, http.StatusInternalServerError, "internal error")
+			}
 			return
 		}
+
 		writeJSON(w, http.StatusOK, UserResponse{ID: u.ID, Name: u.Name, Email: u.Email})
 		return
 

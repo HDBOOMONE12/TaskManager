@@ -11,8 +11,9 @@ import (
 )
 
 var (
-	errBadPath = errors.New("bad user path")
-	errBadID   = errors.New("bad user id")
+	errBadPath   = errors.New("bad user path")
+	errBadID     = errors.New("bad user id")
+	errBadTaskID = errors.New("bad task id")
 )
 
 func parseUserID(r *http.Request) (int, error) {
@@ -121,4 +122,41 @@ func respondDecodeError(w http.ResponseWriter, err error) {
 	default:
 		errorJSON(w, http.StatusBadRequest, "invalid JSON")
 	}
+}
+
+func parseUserTasksListPath(r *http.Request) (int, error) {
+	path := r.URL.Path
+	parts := strings.Split(path, "/")
+
+	if !(len(parts) == 4 || (len(parts) == 5 && parts[4] == "")) {
+		return 0, errBadPath
+	}
+	if parts[1] != "users" || parts[3] != "tasks" {
+		return 0, errBadPath
+	}
+
+	uid, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return 0, errBadID
+	}
+	return uid, nil
+}
+
+func parseUserTaskDetailPath(r *http.Request) (int, int, error) {
+	parts := strings.Split(r.URL.Path, "/")
+
+	if !((len(parts) == 5 && parts[1] == "users" && parts[3] == "tasks") ||
+		(len(parts) == 6 && parts[1] == "users" && parts[3] == "tasks" && parts[5] == "")) {
+		return 0, 0, errBadPath
+	}
+
+	uid, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return 0, 0, errBadID
+	}
+	tid, err := strconv.Atoi(parts[4])
+	if err != nil {
+		return 0, 0, errBadTaskID
+	}
+	return uid, tid, nil
 }

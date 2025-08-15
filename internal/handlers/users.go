@@ -20,6 +20,10 @@ type UserResponse struct {
 
 func UsersHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
+	case http.MethodHead:
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
 	case http.MethodGet:
 		list := service.ListUsers()
 		resp := make([]UserResponse, 0, len(list))
@@ -55,13 +59,36 @@ func UsersHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusCreated, UserResponse{ID: u.ID, Name: u.Name, Email: u.Email})
 
 	default:
-		w.Header().Set("Allow", "GET, POST")
+		w.Header().Set("Allow", "HEAD, GET, POST")
 		errorJSON(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
 func UserDetailHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
+	case http.MethodHead:
+		w.Header().Set("Content-Type", "application/json")
+		id, perr := parseUserID(r)
+		if perr != nil {
+			if errors.Is(perr, errBadPath) {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			if errors.Is(perr, errBadID) {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		_, ok := service.GetUserByID(id)
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+
 	case http.MethodGet:
 		id, perr := parseUserID(r)
 		if perr != nil {
@@ -203,7 +230,7 @@ func UserDetailHandler(w http.ResponseWriter, r *http.Request) {
 		return
 
 	default:
-		w.Header().Set("Allow", "GET, PUT, PATCH, DELETE")
+		w.Header().Set("Allow", "HEAD, GET, PUT, PATCH, DELETE")
 		errorJSON(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }

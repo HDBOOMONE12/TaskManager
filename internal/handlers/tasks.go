@@ -31,6 +31,28 @@ type CreateTaskRequest struct {
 
 func UserTasksHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
+	case http.MethodHead:
+		w.Header().Set("Content-Type", "application/json")
+		uid, perr := parseUserTasksListPath(r)
+		if perr != nil {
+			if errors.Is(perr, errBadPath) {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			if errors.Is(perr, errBadID) {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if _, ok := service.GetUserByID(uid); !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+
 	case http.MethodGet:
 		uid, perr := parseUserTasksListPath(r)
 		if perr != nil {
@@ -111,13 +133,46 @@ func UserTasksHandler(w http.ResponseWriter, r *http.Request) {
 		})
 
 	default:
-		w.Header().Set("Allow", "GET, POST")
+		w.Header().Set("Allow", "HEAD, GET, POST")
 		errorJSON(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
 func UserTaskDetailHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
+	case http.MethodHead:
+		w.Header().Set("Content-Type", "application/json")
+		uid, tid, perr := parseUserTaskDetailPath(r)
+		if perr != nil {
+			if errors.Is(perr, errBadPath) {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			if errors.Is(perr, errBadID) {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if errors.Is(perr, errBadTaskID) {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if _, ok := service.GetUserByID(uid); !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		_, ok := service.GetTaskByUser(uid, tid)
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+
 	case http.MethodGet:
 		uid, tid, perr := parseUserTaskDetailPath(r)
 		if perr != nil {
@@ -306,7 +361,7 @@ func UserTaskDetailHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 
 	default:
-		w.Header().Set("Allow", "GET, PUT, PATCH, DELETE")
+		w.Header().Set("Allow", "HEAD, GET, PUT, PATCH, DELETE")
 		errorJSON(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }

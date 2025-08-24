@@ -10,12 +10,12 @@ import (
 )
 
 type TaskResponse struct {
-	ID          int        `json:"id"`
-	UserID      int        `json:"user_id"`
+	ID          int64      `json:"id"`
+	UserID      int64      `json:"user_id"`
 	Title       string     `json:"title"`
 	Description string     `json:"description"`
 	Status      string     `json:"status"`
-	Priority    int        `json:"priority"`
+	Priority    int64      `json:"priority"`
 	DueAt       *time.Time `json:"due_at"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
@@ -28,6 +28,10 @@ type CreateTaskRequest struct {
 	Priority    int    `json:"priority"`
 	DueAt       string `json:"due_at"`
 }
+
+var taskSvc *service.TaskService
+
+func SetTaskService(s *service.TaskService) { taskSvc = s }
 
 func UserTasksHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
@@ -47,7 +51,7 @@ func UserTasksHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if _, ok := service.GetUserByID(uid); !ok {
+		if _, err := userSvc.GetUserByID(r.Context(), int64(uid)); err != nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -67,18 +71,28 @@ func UserTasksHandler(w http.ResponseWriter, r *http.Request) {
 			errorJSON(w, http.StatusBadRequest, "bad request")
 			return
 		}
-		if _, ok := service.GetUserByID(uid); !ok {
+		if _, err := userSvc.GetUserByID(r.Context(), int64(uid)); err != nil {
 			errorJSON(w, http.StatusNotFound, "user not found")
 			return
 		}
 
-		list := service.ListTasksByUser(uid)
+		list, err := taskSvc.ListTasksByUser(r.Context(), int64(uid))
+		if err != nil {
+			respondTaskError(w, err)
+			return
+		}
 		resp := make([]TaskResponse, 0, len(list))
 		for _, t := range list {
 			resp = append(resp, TaskResponse{
-				ID: t.ID, UserID: t.UserID, Title: t.Title, Description: t.Description,
-				Status: t.Status, Priority: t.Priority, DueAt: t.DueAt,
-				CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
+				ID:          t.ID,
+				UserID:      t.UserID,
+				Title:       t.Title,
+				Description: t.Description,
+				Status:      t.Status,
+				Priority:    t.Priority,
+				DueAt:       t.DueAt,
+				CreatedAt:   t.CreatedAt,
+				UpdatedAt:   t.UpdatedAt,
 			})
 		}
 		writeJSON(w, http.StatusOK, resp)
@@ -120,16 +134,30 @@ func UserTasksHandler(w http.ResponseWriter, r *http.Request) {
 			duePtr = &t
 		}
 
-		task, err := service.CreateTask(uid, req.Title, req.Description, req.Status, req.Priority, duePtr)
+		task, err := taskSvc.CreateTask(
+			r.Context(),
+			int64(uid),
+			req.Title,
+			req.Description,
+			req.Status,
+			int64(req.Priority),
+			duePtr,
+		)
 		if err != nil {
 			respondTaskError(w, err)
 			return
 		}
 
 		writeJSON(w, http.StatusCreated, TaskResponse{
-			ID: task.ID, UserID: task.UserID, Title: task.Title, Description: task.Description,
-			Status: task.Status, Priority: task.Priority, DueAt: task.DueAt,
-			CreatedAt: task.CreatedAt, UpdatedAt: task.UpdatedAt,
+			ID:          task.ID,
+			UserID:      task.UserID,
+			Title:       task.Title,
+			Description: task.Description,
+			Status:      task.Status,
+			Priority:    task.Priority,
+			DueAt:       task.DueAt,
+			CreatedAt:   task.CreatedAt,
+			UpdatedAt:   task.UpdatedAt,
 		})
 
 	default:
@@ -148,11 +176,7 @@ func UserTaskDetailHandler(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
-			if errors.Is(perr, errBadID) {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			if errors.Is(perr, errBadTaskID) {
+			if errors.Is(perr, errBadID) || errors.Is(perr, errBadTaskID) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
@@ -160,17 +184,15 @@ func UserTaskDetailHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if _, ok := service.GetUserByID(uid); !ok {
+		if _, err := userSvc.GetUserByID(r.Context(), int64(uid)); err != nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-
-		_, ok := service.GetTaskByUser(uid, tid)
-		if !ok {
+		t, err := taskSvc.GetTaskByID(r.Context(), int64(tid))
+		if err != nil || t.UserID != int64(uid) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-
 		w.WriteHeader(http.StatusOK)
 
 	case http.MethodGet:
@@ -191,20 +213,26 @@ func UserTaskDetailHandler(w http.ResponseWriter, r *http.Request) {
 			errorJSON(w, http.StatusBadRequest, "bad request")
 			return
 		}
-		if _, ok := service.GetUserByID(uid); !ok {
+		if _, err := userSvc.GetUserByID(r.Context(), int64(uid)); err != nil {
 			errorJSON(w, http.StatusNotFound, "user not found")
 			return
 		}
-		task, ok := service.GetTaskByUser(uid, tid)
-		if !ok {
+		task, err := taskSvc.GetTaskByID(r.Context(), int64(tid))
+		if err != nil || task.UserID != int64(uid) {
 			errorJSON(w, http.StatusNotFound, "task not found")
 			return
 		}
 
 		writeJSON(w, http.StatusOK, TaskResponse{
-			ID: task.ID, UserID: task.UserID, Title: task.Title, Description: task.Description,
-			Status: task.Status, Priority: task.Priority, DueAt: task.DueAt,
-			CreatedAt: task.CreatedAt, UpdatedAt: task.UpdatedAt,
+			ID:          task.ID,
+			UserID:      task.UserID,
+			Title:       task.Title,
+			Description: task.Description,
+			Status:      task.Status,
+			Priority:    task.Priority,
+			DueAt:       task.DueAt,
+			CreatedAt:   task.CreatedAt,
+			UpdatedAt:   task.UpdatedAt,
 		})
 
 	case http.MethodPut:
@@ -254,16 +282,28 @@ func UserTaskDetailHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		updated, err := service.UpdateTask(uid, tid, req.Title, req.Description, req.Status, req.Priority, duePtr)
+		updated, err := taskSvc.UpdateTask(
+			r.Context(),
+			int64(uid), int64(tid),
+			req.Title, req.Description, req.Status,
+			int64(req.Priority),
+			duePtr,
+		)
 		if err != nil {
 			respondTaskError(w, err)
 			return
 		}
 
 		writeJSON(w, http.StatusOK, TaskResponse{
-			ID: updated.ID, UserID: updated.UserID, Title: updated.Title, Description: updated.Description,
-			Status: updated.Status, Priority: updated.Priority, DueAt: updated.DueAt,
-			CreatedAt: updated.CreatedAt, UpdatedAt: updated.UpdatedAt,
+			ID:          updated.ID,
+			UserID:      updated.UserID,
+			Title:       updated.Title,
+			Description: updated.Description,
+			Status:      updated.Status,
+			Priority:    updated.Priority,
+			DueAt:       updated.DueAt,
+			CreatedAt:   updated.CreatedAt,
+			UpdatedAt:   updated.UpdatedAt,
 		})
 
 	case http.MethodPatch:
@@ -321,16 +361,28 @@ func UserTaskDetailHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		task, err := service.PatchTask(uid, tid, req.Title, req.Description, req.Status, req.Priority, dueAtProvided, duePtr)
+		task, err := taskSvc.PatchTask(
+			r.Context(),
+			int64(uid), int64(tid),
+			req.Title, req.Description, req.Status,
+			req.Priority,
+			dueAtProvided, duePtr,
+		)
 		if err != nil {
 			respondTaskError(w, err)
 			return
 		}
 
 		writeJSON(w, http.StatusOK, TaskResponse{
-			ID: task.ID, UserID: task.UserID, Title: task.Title, Description: task.Description,
-			Status: task.Status, Priority: task.Priority, DueAt: task.DueAt,
-			CreatedAt: task.CreatedAt, UpdatedAt: task.UpdatedAt,
+			ID:          task.ID,
+			UserID:      task.UserID,
+			Title:       task.Title,
+			Description: task.Description,
+			Status:      task.Status,
+			Priority:    task.Priority,
+			DueAt:       task.DueAt,
+			CreatedAt:   task.CreatedAt,
+			UpdatedAt:   task.UpdatedAt,
 		})
 
 	case http.MethodDelete:
@@ -352,9 +404,8 @@ func UserTaskDetailHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		ok := service.DeleteTaskByUser(uid, tid)
-		if !ok {
-			errorJSON(w, http.StatusNotFound, "task not found")
+		if err := taskSvc.DeleteTaskByUser(r.Context(), int64(uid), int64(tid)); err != nil {
+			respondTaskError(w, err)
 			return
 		}
 

@@ -10,36 +10,32 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/HDBOOMONE12/TaskManager/internal/config"
+	"github.com/HDBOOMONE12/TaskManager/internal/db"
 	"github.com/HDBOOMONE12/TaskManager/internal/handlers"
+	"github.com/HDBOOMONE12/TaskManager/internal/service"
 	"github.com/HDBOOMONE12/TaskManager/internal/storage"
+
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func main() {
-	cfg := config.LoadConfig()
 
-	if !cfg.EnableHTTP {
-		log.Printf("HTTP is disabled by config — exiting without starting the server")
-		return
-	}
-	if cfg.DatabaseURL == "" {
-		log.Printf("HTTP is enabled, but DATABASE_URL is empty — exiting")
-		return
-	}
+	database := db.Init()
+	defer database.Close()
 
-	log.Printf("Connecting to DB: %s", config.MaskDSN(cfg.DatabaseURL))
-	db, err := storage.NewDB(cfg.DatabaseURL)
-	if err != nil {
-		log.Printf("DB connection failed: %v", err)
-		return
-	}
-	log.Printf("Database is ready")
+	userRepo := storage.NewUserRepo(database)
+	taskRepo := storage.NewTaskRepo(database)
+
+	userSvc := service.NewUserService(userRepo)
+	taskSvc := service.NewTaskService(taskRepo)
+
+	handlers.SetUserService(userSvc)
+	handlers.SetTaskService(taskSvc)
 
 	mux := buildMux()
 	srv := &http.Server{
 		Handler:           mux,
-		Addr:              cfg.HTTPAddr,
+		Addr:              "localhost:8080",
 		ReadHeaderTimeout: 5 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		ReadTimeout:       15 * time.Second,
@@ -52,6 +48,8 @@ func main() {
 			log.Printf("http server error: %v", err)
 		}
 	}()
+
+	log.Println("Server started")
 
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
@@ -68,12 +66,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	err = srv.Shutdown(ctx)
-
-	if closeErr := db.Close(); closeErr != nil {
-		log.Printf("db close error: %v", closeErr)
-	}
-
+	err := srv.Shutdown(ctx)
 	switch {
 	case err == nil:
 		log.Printf("graceful shutdown complete")

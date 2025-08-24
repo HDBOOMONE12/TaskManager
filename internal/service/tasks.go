@@ -1,24 +1,21 @@
 package service
 
 import (
+	"context"
 	"errors"
-	"sync"
 	"time"
+
+	"github.com/HDBOOMONE12/TaskManager/internal/entity"
+	"github.com/HDBOOMONE12/TaskManager/internal/storage"
 )
 
 const (
 	StatusTodo       = "todo"
-	StatusInProgress = "in_progress"
+	StatusInProgress = "doing"
 	StatusDone       = "done"
 
 	MinPriority = 1
 	MaxPriority = 5
-)
-
-var (
-	tasksMu    sync.RWMutex
-	tasks      = make(map[int]Task)
-	nextTaskID = 1
 )
 
 var (
@@ -29,16 +26,12 @@ var (
 	ErrTaskNotFound = errors.New("task not found")
 )
 
-type Task struct {
-	ID          int
-	UserID      int
-	Title       string
-	Description string
-	Status      string
-	Priority    int
-	DueAt       *time.Time
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+type TaskService struct {
+	repo *storage.TaskRepo
+}
+
+func NewTaskService(repo *storage.TaskRepo) *TaskService {
+	return &TaskService{repo: repo}
 }
 
 func isValidStatus(status string) bool {
@@ -49,172 +42,106 @@ func isValidStatus(status string) bool {
 	return false
 }
 
-func isValidPriority(priority int) bool {
-	if priority >= MinPriority && priority <= MaxPriority {
-		return true
-	}
-	return false
+func isValidPriority(priority int64) bool {
+	return priority >= MinPriority && priority <= MaxPriority
 }
 
-func CreateTask(userID int, title, desc, status string, priority int, dueAt *time.Time) (Task, error) {
-
-	if _, ok := GetUserByID(userID); !ok {
-		return Task{}, ErrUserNotFound
-	}
-
+func (s *TaskService) CreateTask(ctx context.Context, userID int64, title, desc, status string, priority int64, dueAt *time.Time) (entity.Task, error) {
 	if status == "" {
 		status = StatusTodo
 	}
 	if priority == 0 {
 		priority = 3
 	}
-
 	if title == "" {
-		return Task{}, ErrEmptyTitle
+		return entity.Task{}, ErrEmptyTitle
 	}
 	if !isValidStatus(status) {
-		return Task{}, ErrBadStatus
+		return entity.Task{}, ErrBadStatus
 	}
 	if !isValidPriority(priority) {
-		return Task{}, ErrBadPriority
+		return entity.Task{}, ErrBadPriority
 	}
 
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
-
-	id := nextTaskID
-	nextTaskID++
-
-	now := time.Now()
-	task := Task{
-		ID:          id,
+	t := &entity.Task{
 		UserID:      userID,
 		Title:       title,
 		Description: desc,
 		Status:      status,
 		Priority:    priority,
 		DueAt:       dueAt,
-		CreatedAt:   now,
-		UpdatedAt:   now,
 	}
-	tasks[id] = task
-	return task, nil
+	if err := s.repo.Create(ctx, t); err != nil {
+		return entity.Task{}, err
+	}
+	return *t, nil
 }
 
-func GetTaskByID(id int) (Task, bool) {
-	tasksMu.RLock()
-	defer tasksMu.RUnlock()
-	task, ok := tasks[id]
-	return task, ok
+func (s *TaskService) GetTaskByID(ctx context.Context, id int64) (entity.Task, error) {
+	return s.repo.GetByID(ctx, id)
 }
 
-func ListTasksByUser(userID int) []Task {
-	tasksMu.RLock()
-	defer tasksMu.RUnlock()
-	tasksByUser := make([]Task, 0)
-	for _, task := range tasks {
-		if task.UserID == userID {
-			tasksByUser = append(tasksByUser, task)
-		}
-	}
-	return tasksByUser
+func (s *TaskService) ListTasksByUser(ctx context.Context, userID int64) ([]entity.Task, error) {
+	return s.repo.GetByUserID(ctx, userID)
 }
 
-func GetTaskByUser(uid, tid int) (Task, bool) {
-	task, ok := GetTaskByID(tid)
-	if !ok {
-		return Task{}, false
-	}
-	if task.UserID != uid {
-		return Task{}, false
-	}
-	return task, true
-}
-
-func UpdateTask(uid, tid int, title, desc, status string, priority int, dueAt *time.Time) (Task, error) {
-
+func (s *TaskService) UpdateTask(ctx context.Context, uid, tid int64, title, desc, status string, priority int64, dueAt *time.Time) (entity.Task, error) {
 	if title == "" {
-		return Task{}, ErrEmptyTitle
+		return entity.Task{}, ErrEmptyTitle
 	}
 	if !isValidStatus(status) {
-		return Task{}, ErrBadStatus
+		return entity.Task{}, ErrBadStatus
 	}
 	if !isValidPriority(priority) {
-		return Task{}, ErrBadPriority
+		return entity.Task{}, ErrBadPriority
 	}
 
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
-
-	t, ok := tasks[tid]
-
-	if !ok {
-		return Task{}, ErrTaskNotFound
+	t := &entity.Task{
+		ID:          tid,
+		UserID:      uid,
+		Title:       title,
+		Description: desc,
+		Status:      status,
+		Priority:    priority,
+		DueAt:       dueAt,
 	}
-
-	if t.UserID != uid {
-		return Task{}, ErrTaskNotFound
-	}
-
-	t.Title = title
-	t.Description = desc
-	t.Status = status
-	t.Priority = priority
-	t.DueAt = dueAt
-	t.UpdatedAt = time.Now()
-
-	tasks[tid] = t
-	return t, nil
+	return s.repo.Update(ctx, t)
 }
 
-func PatchTask(uid, tid int, title, desc, status *string, priority *int, dueAtProvided bool, dueAt *time.Time) (Task, error) {
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
-
-	t, ok := tasks[tid]
-	if !ok || t.UserID != uid {
-		return Task{}, ErrTaskNotFound
+func (s *TaskService) PatchTask(
+	ctx context.Context,
+	uid, tid int64,
+	title, desc, status *string,
+	priority *int,
+	dueAtProvided bool,
+	dueAt *time.Time,
+) (entity.Task, error) {
+	cur, err := s.repo.GetByID(ctx, tid)
+	if err != nil {
+		return entity.Task{}, ErrTaskNotFound
 	}
-
-	if title != nil {
-		if *title == "" {
-			return Task{}, ErrEmptyTitle
-		}
-		t.Title = *title
+	if cur.UserID != uid {
+		return entity.Task{}, ErrTaskNotFound
 	}
-	if desc != nil {
-		t.Description = *desc
+	if title != nil && *title == "" {
+		return entity.Task{}, ErrEmptyTitle
 	}
-	if status != nil {
-		if !isValidStatus(*status) {
-			return Task{}, ErrBadStatus
-		}
-		t.Status = *status
+	if status != nil && !isValidStatus(*status) {
+		return entity.Task{}, ErrBadStatus
 	}
-	if priority != nil {
-		if !isValidPriority(*priority) {
-			return Task{}, ErrBadPriority
-		}
-		t.Priority = *priority
+	if priority != nil && !isValidPriority(int64(*priority)) {
+		return entity.Task{}, ErrBadPriority
 	}
-	if dueAtProvided {
-		t.DueAt = dueAt
-	}
-
-	t.UpdatedAt = time.Now()
-	tasks[tid] = t
-	return t, nil
+	return s.repo.Patch(ctx, uid, tid, title, desc, status, priority, dueAtProvided, dueAt)
 }
 
-func DeleteTaskByUser(uid, tid int) bool {
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
-
-	t, ok := tasks[tid]
-	if !ok || t.UserID != uid {
-		return false
+func (s *TaskService) DeleteTaskByUser(ctx context.Context, uid, tid int64) error {
+	cur, err := s.repo.GetByID(ctx, tid)
+	if err != nil {
+		return ErrTaskNotFound
 	}
-
-	delete(tasks, tid)
-	return true
+	if cur.UserID != uid {
+		return ErrTaskNotFound
+	}
+	return s.repo.Delete(ctx, tid)
 }

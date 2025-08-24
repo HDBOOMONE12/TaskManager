@@ -1,116 +1,65 @@
 package service
 
 import (
+	"context"
 	"errors"
-	"sync"
+	"github.com/HDBOOMONE12/TaskManager/internal/entity"
+	"github.com/HDBOOMONE12/TaskManager/internal/storage"
 )
 
 var (
-	mu     sync.RWMutex
-	users  = make(map[int]User)
-	nextID = 1
-
 	ErrEmptyName  = errors.New("empty name")
 	ErrEmptyEmail = errors.New("empty email")
 )
 
-type User struct {
-	ID    int
-	Name  string
-	Email string
+type UserService struct {
+	repo *storage.UserRepo
 }
 
-func CreateUser(name, email string) (User, error) {
+func NewUserService(repo *storage.UserRepo) *UserService {
+	return &UserService{repo: repo}
+}
+
+func (s *UserService) CreateUser(ctx context.Context, name, email string) (entity.User, error) {
 	if name == "" {
-		return User{}, ErrEmptyName
+		return entity.User{}, ErrEmptyName
 	}
 	if email == "" {
-		return User{}, ErrEmptyEmail
+		return entity.User{}, ErrEmptyEmail
 	}
 
-	mu.Lock()
-	defer mu.Unlock()
-
-	u := User{
-		ID:    nextID,
-		Name:  name,
-		Email: email,
+	user := &entity.User{
+		Username: name,
+		Email:    email,
 	}
-	users[u.ID] = u
-	nextID++
-	return u, nil
-}
-
-func ListUsers() []User {
-	mu.RLock()
-	defer mu.RUnlock()
-	list := make([]User, 0, len(users))
-	for _, v := range users {
-		list = append(list, v)
+	if err := s.repo.Create(ctx, user); err != nil {
+		return entity.User{}, err
 	}
-	return list
+	return *user, nil
 }
 
-func GetUserByID(id int) (User, bool) {
-	mu.RLock()
-	defer mu.RUnlock()
-	u, ok := users[id]
-	return u, ok
+func (s *UserService) ListUsers(ctx context.Context) ([]entity.User, error) {
+	return s.repo.GetAll(ctx)
 }
 
-func UpdateUserByID(id int, name, email string) (User, error) {
+func (s *UserService) GetUserByID(ctx context.Context, id int64) (entity.User, error) {
+	return s.repo.GetByID(ctx, id)
+}
+
+func (s *UserService) UpdateUserByID(ctx context.Context, id int64, name, email string) (entity.User, error) {
 	if name == "" {
-		return User{}, ErrEmptyName
+		return entity.User{}, ErrEmptyName
 	}
 	if email == "" {
-		return User{}, ErrEmptyEmail
+		return entity.User{}, ErrEmptyEmail
 	}
-
-	mu.Lock()
-	defer mu.Unlock()
-
-	u, ok := users[id]
-	if !ok {
-		return User{}, ErrUserNotFound
-	}
-	u.Name = name
-	u.Email = email
-	users[id] = u
-	return u, nil
+	return s.repo.Update(ctx, id, name, email)
 }
 
-func PatchUserByID(id int, name, email *string) (User, error) {
-	mu.Lock()
-	defer mu.Unlock()
-
-	u, ok := users[id]
-	if !ok {
-		return User{}, ErrUserNotFound
-	}
-
-	if name != nil {
-		if *name == "" {
-			return User{}, ErrEmptyName
-		}
-		u.Name = *name
-	}
-	if email != nil {
-		if *email == "" {
-			return User{}, ErrEmptyEmail
-		}
-		u.Email = *email
-	}
-
-	users[id] = u
-	return u, nil
+func (s *UserService) PatchUserByID(ctx context.Context, id int64, name, email *string) (entity.User, error) {
+	return s.repo.Patch(ctx, id, name, email)
 }
 
-func DeleteUserByID(id int) bool {
-	mu.Lock()
-	defer mu.Unlock()
-	if _, ok := users[id]; !ok {
-		return false
-	}
-	delete(users, id)
-	return true
+func (s *UserService) DeleteUserByID(ctx context.Context, id int64) error {
+	return s.repo.Delete(ctx, id)
 }

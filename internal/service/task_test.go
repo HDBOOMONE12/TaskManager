@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"github.com/HDBOOMONE12/TaskManager/internal/entity"
 	"github.com/HDBOOMONE12/TaskManager/internal/mocks"
 	"github.com/golang/mock/gomock"
 	"testing"
@@ -169,14 +170,19 @@ func TestTaskService_UpdateTask(t *testing.T) {
 			priority: 3,
 			mockSetup: func() {
 				mockRepo.EXPECT().
-					Update(
-						gomock.Any(),
-						gomock.Any(),
-					).
-					Return(nil)
+					Update(gomock.Any(), gomock.Any()).
+					Return(entity.Task{
+						ID:       1,
+						UserID:   1,
+						Title:    "1",
+						Status:   StatusTodo,
+						Priority: 5,
+					}, nil).
+					Times(1)
 			},
 			wantErr: nil,
 		},
+
 		{
 			name:     "empty title",
 			title:    "",
@@ -224,7 +230,7 @@ func TestTaskService_UpdateTask(t *testing.T) {
 					Update(
 						gomock.Any(),
 						gomock.Any(),
-					).Return(dbErr)
+					).Return(entity.Task{}, dbErr).Times(1)
 			},
 			wantErr: dbErr,
 		},

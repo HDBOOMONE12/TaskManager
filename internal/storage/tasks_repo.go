@@ -1,3 +1,4 @@
+//go:generate mockgen -source=tasks_repo.go -destination=../mocks/mock_task_repo.go -package=mocks
 package storage
 
 import (
@@ -8,6 +9,15 @@ import (
 	"github.com/HDBOOMONE12/TaskManager/internal/entity"
 	"time"
 )
+
+type TaskRepository interface {
+	Create(ctx context.Context, task *entity.Task) error
+	GetByID(ctx context.Context, id int64) (entity.Task, error)
+	GetByUserID(ctx context.Context, userID int64) ([]entity.Task, error)
+	Update(ctx context.Context, task *entity.Task) (entity.Task, error)
+	Patch(ctx context.Context, uid, tid int64, title, desc, status *string, priority *int, dueAtProvided bool, dueAt *time.Time) (entity.Task, error)
+	Delete(ctx context.Context, id int64) error
+}
 
 type TaskRepo struct {
 	db *sql.DB

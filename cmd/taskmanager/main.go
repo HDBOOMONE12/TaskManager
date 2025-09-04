@@ -19,7 +19,9 @@ import (
 
 func main() {
 
-	database := db.Init()
+	config := LoadConfig()
+
+	database := db.Init(config.DatabaseURL)
 	defer database.Close()
 
 	userRepo := storage2.NewUserRepo(database)

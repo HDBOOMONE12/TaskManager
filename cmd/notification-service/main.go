@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/HDBOOMONE12/TaskManager/internal/notification-service/handlers"
 	"github.com/HDBOOMONE12/TaskManager/internal/notification-service/senders"
+	"github.com/HDBOOMONE12/TaskManager/internal/notification-service/taskclient"
 	"log"
 	"net/http"
 	"os"
@@ -27,7 +28,8 @@ func main() {
 
 	telegramSender := senders.NewTelegramSender(cfg.TelegramToken)
 	repo := storage.NewTelegramBindingRepo(dbConn)
-	bindingService := service.NewBindingService(repo)
+	taskClient := taskclient.NewTaskClient(cfg.BaseUrl)
+	bindingService := service.NewBindingService(repo, taskClient)
 	h := handlers.NewWebhookHandler(telegramSender, bindingService)
 
 	mux := buildMux(h)

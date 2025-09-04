@@ -140,3 +140,20 @@ func (r *UserRepo) Delete(ctx context.Context, id int64) error {
 	}
 	return nil
 }
+
+func (r *UserRepo) GetByEmail(ctx context.Context, email string) (entity.User, error) {
+	row := r.db.QueryRowContext(ctx,
+		"SELECT id, username, email, created_at, updated_at FROM users WHERE email = $1",
+		email,
+	)
+
+	var user entity.User
+	err := row.Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return entity.User{}, sql.ErrNoRows
+		}
+		return entity.User{}, err
+	}
+	return user, nil
+}

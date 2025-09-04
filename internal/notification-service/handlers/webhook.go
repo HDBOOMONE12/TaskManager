@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"bytes"
+	"errors"
 	"github.com/HDBOOMONE12/TaskManager/internal/notification-service/entity"
+	"github.com/HDBOOMONE12/TaskManager/internal/notification-service/notifyerrors"
 	"github.com/HDBOOMONE12/TaskManager/internal/notification-service/senders"
 	"github.com/HDBOOMONE12/TaskManager/internal/notification-service/service"
 	"io"
@@ -68,9 +70,16 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		err = h.bindingService.BindEmailToChat(r.Context(), msg, chatId)
+
+		if errors.Is(err, notifyerrors.ErrUserNotFound) {
+			log.Printf("Привязка провалена — не найден пользователь: %v", err)
+			h.sender.SendMessage(chatId, "❌ Пользователь с такой почтой не найден.")
+			return
+		}
+
 		if err != nil {
-			log.Printf("ошибка привязки: %v", err)
-			h.sender.SendMessage(chatId, "Ошибка при привязке почты. Попробуйте позже.")
+			log.Printf("Ошибка привязки: %v", err)
+			h.sender.SendMessage(chatId, "❗ Произошла ошибка. Попробуйте позже.")
 			return
 		}
 

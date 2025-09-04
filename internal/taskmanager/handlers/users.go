@@ -33,12 +33,31 @@ func UsersHandler(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodGet:
 		ctx := r.Context()
+
+		if email := r.URL.Query().Get("email"); email != "" {
+			u, err := userSvc.GetByEmail(ctx, email)
+			if err != nil {
+				errorJSON(w, http.StatusNotFound, "user with this email not found")
+				return
+			}
+			resp := make([]UserResponse, 0)
+			resp = append(resp, UserResponse{
+				ID:    u.ID,
+				Name:  u.Username,
+				Email: u.Email,
+			})
+			writeJSON(w, http.StatusOK, resp)
+			return
+		}
+
 		list, err := userSvc.ListUsers(ctx)
+
 		if err != nil {
 			errorJSON(w, http.StatusInternalServerError, "internal error")
 			return
 		}
 		resp := make([]UserResponse, 0, len(list))
+
 		for _, u := range list {
 			resp = append(resp, UserResponse{ID: u.ID, Name: u.Username, Email: u.Email})
 		}
@@ -120,8 +139,6 @@ func UserDetailHandler(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		u, err := userSvc.GetUserByID(ctx, int64(id))
 		if err != nil {
-			// считаем любую ошибку — как not found, либо можешь расширить проверку:
-			// if errors.Is(err, sql.ErrNoRows) { ... }
 			errorJSON(w, http.StatusNotFound, "user not found")
 			return
 		}

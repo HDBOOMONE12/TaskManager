@@ -63,3 +63,7 @@ func (s *UserService) PatchUserByID(ctx context.Context, id int64, name, email *
 func (s *UserService) DeleteUserByID(ctx context.Context, id int64) error {
 	return s.repo.Delete(ctx, id)
 }
+
+func (s *UserService) GetByEmail(ctx context.Context, email string) (entity.User, error) {
+	return s.repo.GetByEmail(ctx, email)
+}

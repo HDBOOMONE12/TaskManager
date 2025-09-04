@@ -2,9 +2,8 @@ package handlers
 
 import (
 	"errors"
+	"github.com/HDBOOMONE12/TaskManager/internal/taskmanager/service"
 	"net/http"
-
-	"github.com/HDBOOMONE12/TaskManager/internal/service"
 )
 
 func respondTaskError(w http.ResponseWriter, err error) bool {

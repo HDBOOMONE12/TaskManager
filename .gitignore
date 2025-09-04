@@ -21,9 +21,9 @@ tmp/
 *.tmp
 
 # Env & secrets
-.env
-.env.*
-!.env.example
+cmd/taskmanager/.env
+cmd/taskmanager/.env.example
+!cmd/taskmanager/.env.example
 
 # DB data
 pgdata/

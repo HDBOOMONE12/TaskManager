@@ -3,18 +3,10 @@ package db
 import (
 	"database/sql"
 	"log"
-	"os"
 	"time"
 )
-import "github.com/joho/godotenv"
 
-func Init() *sql.DB {
-	_ = godotenv.Load()
-	dsn := os.Getenv("DATABASE_URL")
-
-	if dsn == "" {
-		log.Fatal("DATABASE_URL is not set")
-	}
+func Init(dsn string) *sql.DB {
 
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
@@ -23,7 +15,6 @@ func Init() *sql.DB {
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(time.Minute * 30)
-	err = db.Ping()
 
 	if err := db.Ping(); err != nil {
 		log.Fatalf("cannot connect to DB: %v", err)

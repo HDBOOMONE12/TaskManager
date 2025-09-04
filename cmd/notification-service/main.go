@@ -3,10 +3,9 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/HDBOOMONE12/TaskManager/internal/taskmanager/db"
-	handlers2 "github.com/HDBOOMONE12/TaskManager/internal/taskmanager/handlers"
-	service2 "github.com/HDBOOMONE12/TaskManager/internal/taskmanager/service"
-	storage2 "github.com/HDBOOMONE12/TaskManager/internal/taskmanager/storage"
+	"github.com/HDBOOMONE12/TaskManager/internal/notification-service/handlers"
+	"github.com/HDBOOMONE12/TaskManager/internal/notification-service/senders"
+	"github.com/HDBOOMONE12/TaskManager/internal/notification-service/taskclient"
 	"log"
 	"net/http"
 	"os"
@@ -15,42 +14,43 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+
+	"github.com/HDBOOMONE12/TaskManager/internal/notification-service/db"
+	"github.com/HDBOOMONE12/TaskManager/internal/notification-service/service"
+	"github.com/HDBOOMONE12/TaskManager/internal/notification-service/storage"
 )
 
 func main() {
+	cfg := LoadConfig()
 
-	config := LoadConfig()
+	dbConn := db.Init(cfg.DatabaseURL)
+	defer dbConn.Close()
 
-	database := db.Init(config.DatabaseURL)
-	defer database.Close()
+	telegramSender := senders.NewTelegramSender(cfg.TelegramToken)
+	repo := storage.NewTelegramBindingRepo(dbConn)
+	taskClient := taskclient.NewTaskClient(cfg.BaseUrl)
+	bindingService := service.NewBindingService(repo, taskClient)
+	h := handlers.NewWebhookHandler(telegramSender, bindingService)
 
-	userRepo := storage2.NewUserRepo(database)
-	taskRepo := storage2.NewTaskRepo(database)
+	mux := buildMux(h)
 
-	userSvc := service2.NewUserService(userRepo)
-	taskSvc := service2.NewTaskService(taskRepo)
-
-	handlers2.SetUserService(userSvc)
-	handlers2.SetTaskService(taskSvc)
-
-	mux := buildMux()
 	srv := &http.Server{
+		Addr:              ":" + cfg.Port,
 		Handler:           mux,
-		Addr:              "localhost:8080",
 		ReadHeaderTimeout: 5 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
 
-	log.Printf("HTTP listening on %s", srv.Addr)
+	log.Printf("Notification Service HTTP listening on %s", srv.Addr)
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Printf("http server error: %v", err)
 		}
 	}()
 
-	log.Println("Server started")
+	log.Println("Notification Service started")
 
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
@@ -78,9 +78,8 @@ func main() {
 	}
 }
 
-func buildMux() *http.ServeMux {
+func buildMux(h http.Handler) *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/users", handlers2.UsersHandler)
-	mux.HandleFunc("/users/", handlers2.UsersSubtreeHandler)
+	mux.Handle("/webhook", h)
 	return mux
 }

@@ -2,11 +2,10 @@ package handlers
 
 import (
 	"errors"
+	"github.com/HDBOOMONE12/TaskManager/internal/taskmanager/service"
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/HDBOOMONE12/TaskManager/internal/service"
 )
 
 type TaskResponse struct {

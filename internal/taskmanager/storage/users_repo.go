@@ -5,8 +5,17 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/HDBOOMONE12/TaskManager/internal/entity"
+	"github.com/HDBOOMONE12/TaskManager/internal/taskmanager/entity"
 )
+
+type UserRepository interface {
+	Create(ctx context.Context, user *entity.User) error
+	GetAll(ctx context.Context) ([]entity.User, error)
+	GetByID(ctx context.Context, id int64) (entity.User, error)
+	Update(ctx context.Context, id int64, name, email string) (entity.User, error)
+	Patch(ctx context.Context, id int64, name, email *string) (entity.User, error)
+	Delete(ctx context.Context, id int64) (entity.User, error)
+}
 
 type UserRepo struct {
 	db *sql.DB
@@ -130,4 +139,21 @@ func (r *UserRepo) Delete(ctx context.Context, id int64) error {
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+func (r *UserRepo) GetByEmail(ctx context.Context, email string) (entity.User, error) {
+	row := r.db.QueryRowContext(ctx,
+		"SELECT id, username, email, created_at, updated_at FROM users WHERE email = $1",
+		email,
+	)
+
+	var user entity.User
+	err := row.Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return entity.User{}, sql.ErrNoRows
+		}
+		return entity.User{}, err
+	}
+	return user, nil
 }

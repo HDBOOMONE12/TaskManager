@@ -6,10 +6,10 @@ package mocks
 
 import (
 	context "context"
+	"github.com/HDBOOMONE12/TaskManager/internal/taskmanager/entity"
 	reflect "reflect"
 	time "time"
 
-	entity "github.com/HDBOOMONE12/TaskManager/internal/entity"
 	gomock "github.com/golang/mock/gomock"
 )
 

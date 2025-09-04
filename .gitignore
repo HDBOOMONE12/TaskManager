@@ -21,7 +21,7 @@ tmp/
 *.tmp
 
 # Env & secrets
-.env
+cmd/taskmanager/.env
 .env.*
 !.env.example
 

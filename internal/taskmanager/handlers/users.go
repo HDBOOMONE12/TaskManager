@@ -3,10 +3,9 @@ package handlers
 import (
 	"database/sql"
 	"errors"
+	service2 "github.com/HDBOOMONE12/TaskManager/internal/taskmanager/service"
 	"net/http"
 	"strings"
-
-	"github.com/HDBOOMONE12/TaskManager/internal/service"
 )
 
 type CreateUserRequest struct {
@@ -20,9 +19,9 @@ type UserResponse struct {
 	Email string `json:"email"`
 }
 
-var userSvc *service.UserService
+var userSvc *service2.UserService
 
-func SetUserService(s *service.UserService) {
+func SetUserService(s *service2.UserService) {
 	userSvc = s
 }
 
@@ -62,7 +61,7 @@ func UsersHandler(w http.ResponseWriter, r *http.Request) {
 		u, err := userSvc.CreateUser(ctx, req.Name, req.Email)
 		if err != nil {
 			switch {
-			case errors.Is(err, service.ErrEmptyName), errors.Is(err, service.ErrEmptyEmail):
+			case errors.Is(err, service2.ErrEmptyName), errors.Is(err, service2.ErrEmptyEmail):
 				errorJSON(w, http.StatusBadRequest, err.Error())
 			default:
 				errorJSON(w, http.StatusInternalServerError, "internal error")
@@ -160,9 +159,9 @@ func UserDetailHandler(w http.ResponseWriter, r *http.Request) {
 		u, err := userSvc.UpdateUserByID(ctx, int64(id), req.Name, req.Email)
 		if err != nil {
 			switch {
-			case errors.Is(err, service.ErrUserNotFound), errors.Is(err, sql.ErrNoRows):
+			case errors.Is(err, service2.ErrUserNotFound), errors.Is(err, sql.ErrNoRows):
 				errorJSON(w, http.StatusNotFound, "user not found")
-			case errors.Is(err, service.ErrEmptyName), errors.Is(err, service.ErrEmptyEmail):
+			case errors.Is(err, service2.ErrEmptyName), errors.Is(err, service2.ErrEmptyEmail):
 				errorJSON(w, http.StatusBadRequest, err.Error())
 			default:
 				errorJSON(w, http.StatusInternalServerError, "internal error")
@@ -212,9 +211,9 @@ func UserDetailHandler(w http.ResponseWriter, r *http.Request) {
 		u, err := userSvc.PatchUserByID(ctx, int64(id), req.Name, req.Email)
 		if err != nil {
 			switch {
-			case errors.Is(err, service.ErrUserNotFound), errors.Is(err, sql.ErrNoRows):
+			case errors.Is(err, service2.ErrUserNotFound), errors.Is(err, sql.ErrNoRows):
 				errorJSON(w, http.StatusNotFound, "user not found")
-			case errors.Is(err, service.ErrEmptyName), errors.Is(err, service.ErrEmptyEmail):
+			case errors.Is(err, service2.ErrEmptyName), errors.Is(err, service2.ErrEmptyEmail):
 				errorJSON(w, http.StatusBadRequest, err.Error())
 			default:
 				errorJSON(w, http.StatusInternalServerError, "internal error")
@@ -243,7 +242,7 @@ func UserDetailHandler(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		if err := userSvc.DeleteUserByID(ctx, int64(id)); err != nil {
 			switch {
-			case errors.Is(err, service.ErrUserNotFound), errors.Is(err, sql.ErrNoRows):
+			case errors.Is(err, service2.ErrUserNotFound), errors.Is(err, sql.ErrNoRows):
 				errorJSON(w, http.StatusNotFound, "user not found")
 			default:
 				errorJSON(w, http.StatusInternalServerError, "internal error")

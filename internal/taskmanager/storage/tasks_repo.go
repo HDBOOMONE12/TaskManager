@@ -6,7 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/HDBOOMONE12/TaskManager/internal/entity"
+	"github.com/HDBOOMONE12/TaskManager/internal/taskmanager/entity"
 	"time"
 )
 

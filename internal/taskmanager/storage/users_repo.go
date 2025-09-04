@@ -5,8 +5,17 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/HDBOOMONE12/TaskManager/internal/entity"
+	"github.com/HDBOOMONE12/TaskManager/internal/taskmanager/entity"
 )
+
+type UserRepository interface {
+	Create(ctx context.Context, user *entity.User) error
+	GetAll(ctx context.Context) ([]entity.User, error)
+	GetByID(ctx context.Context, id int64) (entity.User, error)
+	Update(ctx context.Context, id int64, name, email string) (entity.User, error)
+	Patch(ctx context.Context, id int64, name, email *string) (entity.User, error)
+	Delete(ctx context.Context, id int64) (entity.User, error)
+}
 
 type UserRepo struct {
 	db *sql.DB

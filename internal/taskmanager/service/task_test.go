@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 	"errors"
-	"github.com/HDBOOMONE12/TaskManager/internal/entity"
-	"github.com/HDBOOMONE12/TaskManager/internal/mocks"
+	"github.com/HDBOOMONE12/TaskManager/internal/taskmanager/entity"
+	"github.com/HDBOOMONE12/TaskManager/internal/taskmanager/mocks"
 	"github.com/golang/mock/gomock"
 	"testing"
 )

@@ -32,9 +32,9 @@ func LoadConfig() *Config {
 		log.Fatal("DATABASE_URL is not set")
 	}
 
-	baseUrl := os.Getenv("TASK_SERVICE_URL")
+	baseUrl := os.Getenv("TASK_SERVICE_GRPC_URL")
 	if baseUrl == "" {
-		log.Fatal("TASK_SERVICE_URL is not set")
+		log.Fatal("TASK_SERVICE_GRPC_URL is not set")
 	}
 
 	return &Config{

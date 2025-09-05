@@ -28,7 +28,12 @@ func main() {
 
 	telegramSender := senders.NewTelegramSender(cfg.TelegramToken)
 	repo := storage.NewTelegramBindingRepo(dbConn)
-	taskClient := taskclient.NewTaskClient(cfg.BaseUrl)
+
+	taskClient, err := taskclient.NewTaskGRPCClient(cfg.BaseUrl)
+	if err != nil {
+		log.Fatalf("gRPC client error: %v", err)
+	}
+
 	bindingService := service.NewBindingService(repo, taskClient)
 	h := handlers.NewWebhookHandler(telegramSender, bindingService)
 
@@ -67,7 +72,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	err := srv.Shutdown(ctx)
+	err = srv.Shutdown(ctx)
 	switch {
 	case err == nil:
 		log.Printf("graceful shutdown complete")

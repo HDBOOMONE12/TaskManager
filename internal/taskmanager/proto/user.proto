@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package users;
+
+option go_package = "internal/taskmanager/proto;userspb";
+
+service UserService {
+  rpc HasUserWithEmail(EmailRequest) returns (UserExistsResponse);
+}
+
+message EmailRequest {
+  string email = 1;
+}
+
+message UserExistsResponse {
+  bool exists = 1;
+}

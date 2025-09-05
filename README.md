@@ -3,8 +3,11 @@
 [![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go)](https://go.dev/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15%2B-336791?logo=postgresql)](https://www.postgresql.org/)
 [![Build](https://img.shields.io/badge/tests-go%20test-success)](#-тестирование)
+[![gRPC](https://img.shields.io/badge/gRPC-50051-8A2BE2?logo=grpc)](#-grpc-task-service--кратко)
+[![Telegram](https://img.shields.io/badge/Telegram-bot-26A5E4?logo=telegram)](#-notification-service-привязка-telegram--task-manager)
 
 **Task Manager** — современная микросервисная платформа для управления задачами, уведомлениями и рейтингами пользователей. Система автоматизирует постановку задач, контроль сроков и уведомления исполнителей, а также рассчитывает рейтинг по результатам работы.
+
 
 **Быстрый сценарий:** заказчик создаёт задачу с дедлайном → исполнителю тут же приходит уведомление в Telegram → по итогам выполнения рейтинг пользователя повышается/понижается и влияет на доступ к более сложным задачам (планируется Rating Service).
 

@@ -4,33 +4,38 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15%2B-336791?logo=postgresql)](https://www.postgresql.org/)
 [![Build](https://img.shields.io/badge/tests-go%20test-success)](#-тестирование)
 
-**Task Manager** — платформа для управления задачами, уведомлениями и рейтингами пользователей.  
-Этот репозиторий содержит **ядро (Task Service)** — REST‑сервис на Go, хранящий пользователей и задачи в **PostgreSQL**.
+**Task Manager** — современная микросервисная платформа для управления задачами, уведомлениями и рейтингами пользователей. Система автоматизирует постановку задач, контроль сроков и уведомления исполнителей, а также рассчитывает рейтинг по результатам работы.
 
-> 🎯 Видение: система из нескольких микросервисов (Task, Notification, Rating), связанных **Kafka + gRPC** и интегрированных с **Telegram**. Текущая версия — монолитный сервис задач с чистой структурой и готовностью к выделению по сервисам.
-
----
-
-## 🧭 Зачем это нужно
-
-- Автоматизировать бизнес‑процессы: постановка задач, контроль сроков, исполнители.
-- Гибкая эволюция до микросервисной архитектуры (Kafka/gRPC, Telegram‑уведомления, рейтинги).
+**Быстрый сценарий:** заказчик создаёт задачу с дедлайном → исполнителю тут же приходит уведомление в Telegram → по итогам выполнения рейтинг пользователя повышается/понижается и влияет на доступ к более сложным задачам (планируется Rating Service).
 
 ---
 
+## 🧱 Микросервисы (коротко)
 
+1) **Task Service (ядро)**
+   - CRUD пользователей и задач (REST), статусы `todo/doing/done`, дедлайны, приоритеты.
+   - Экспортирует **gRPC** метод перевірки пользователя по email.
+   - Хранение: PostgreSQL. Покрыт юнит‑тестами и моками.
 
-## 🛠️ Используемые технологии (кратко)
+2) **Notification Service**
+   - Принимает Telegram **webhook** и отправляет ответы в чат.
+   - Привязывает **email пользователя** к **Telegram chat_id** и проверяет существование пользователя через gRPC к Task Service.
+   - В будущем получает события через Kafka для асинхронных уведомлений.
 
-- **Go 1.24+**: `net/http`, `context`, `encoding/json`, graceful shutdown.
-- **API**: REST + JSON, `http.ServeMux`, унифицированные коды/ошибки.
-- **Config**: `.env` через `godotenv`, ключ — `DATABASE_URL`.
-- **БД**: PostgreSQL 15+, `pgx` через `database/sql`, пул соединений в `internal/db/postgres.go`.
-- **Слои**: `handlers` → `service` → `storage` → БД; доменные сущности в `internal/entity`.
-- **Миграции**: SQL в `internal/db/migrations`.
-- **Тесты**: `go test ./...`, моки через `gomock` (`//go:generate`).
-- **Дальше**: Docker Compose, Kafka + gRPC, JWT, CI/CD, Prometheus/Grafana.
+3) **Rating Service (в планах)**
+   - Подсчёт рейтинга: +за раннее/своевременное выполнение, −за просрочку.
+   - Влияет на доступ к задачам и приоритеты. Связи: gRPC + Kafka.
 
+---
+
+## 🛠️ Технологии
+
+- **Go 1.24+**, `net/http`, `context`, graceful shutdown.
+- **REST + JSON** (Task Service), **gRPC** (`google.golang.org/grpc`).
+- **PostgreSQL 15+**, миграции в `/internal/**/db/migrations`.
+- **Config**: `.env` через `godotenv`.
+- Тесты: `go test ./...`, моки `gomock`.
+- Дальше: Docker Compose, Kafka, JWT, CI/CD, Prometheus/Grafana.
 
 ---
 
@@ -43,96 +48,76 @@ cd TaskManager
 ```
 
 ### 2) Конфигурация окружения
-Создайте `.env`, ориентируясь на `.env.example`:
+
+**Task Service (`cmd/taskmanager/.env`)**
 ```dotenv
 DATABASE_URL=postgres://USER:PASSWORD@localhost:5432/taskmanager?sslmode=disable
 ```
-> Переменные окружения и секреты не коммитим: это уже отражено в `.gitignore`.
 
-### 3) Подготовка БД (миграции)
+**Notification Service (`cmd/notification-service/.env`)**
+```dotenv
+TELEGRAM_BOT_TOKEN=123456:PUT_YOUR_TOKEN_HERE
+PORT=8081
+DATABASE_URL=postgres://USER:PASSWORD@localhost:5432/notify_db?sslmode=disable
+TASK_SERVICE_GRPC_URL=localhost:50051
+```
+> Секреты не коммитим.
+
+### 3) Миграции БД
+
+**Task Service**
 ```bash
-psql "$DATABASE_URL" -f internal/db/migrations/0001_create_users.sql
-psql "$DATABASE_URL" -f internal/db/migrations/0002_create_tasks.sql
-psql "$DATABASE_URL" -f internal/db/migrations/0003_indexes.sql
+psql "$DATABASE_URL" -f internal/taskmanager/db/migrations/0001_create_users.sql
+psql "$DATABASE_URL" -f internal/taskmanager/db/migrations/0002_create_tasks.sql
+psql "$DATABASE_URL" -f internal/taskmanager/db/migrations/0003_indexes.sql
+```
+
+**Notification Service**
+```bash
+psql "$DATABASE_URL" -f internal/notification-service/db/migrations/0001_telegram_bindings.sql
 ```
 
 ### 4) Запуск
+
+**Task Service (HTTP :8080, gRPC :50051)**
 ```bash
 go run ./cmd/taskmanager
 ```
-По умолчанию сервис слушает `http://localhost:8080`.
+
+**Notification Service (HTTP :8081)**
+```bash
+go run ./cmd/notification-service
+```
 
 ---
 
-## 📡 API (REST)
+## 📡 API (REST, Task Service)
 
-Формат ошибок (пример):
+Формат ошибки:
 ```json
-{
-  "error": "message"
-}
+{ "error": "message" }
 ```
 
 ### Пользователи
 
-#### `GET /users`
-Список пользователей.
-
-**Успех — 200 OK**
+`GET /users` — список (поддерживает `?email=`).  
+`POST /users` — создать:
 ```json
-[
-  { "id": 1, "name": "alice", "email": "alice@example.com" },
-  { "id": 2, "name": "bob",   "email": "bob@example.com"   }
-]
+{ "name": "alice", "email": "alice@example.com" }
 ```
-
-#### `POST /users`
-Создать пользователя.
-
-**Тело**
-```json
-{
-  "name": "alice",
-  "email": "alice@example.com"
-}
-```
-
-**Успех — 201 Created**
-```json
-{ "id": 1, "name": "alice", "email": "alice@example.com" }
-```
-
-#### `GET /users/{id}`
-Получить пользователя по ID.  
-Коды: `200`, `404`.
-
-#### `PATCH /users/{id}`
-Частичное обновление имени/email.
-
-**Тело (любой из полей опционален)**
+`GET /users/{id}` — получить.  
+`PATCH /users/{id}` — частичное обновление:
 ```json
 { "name": "Alice Cooper", "email": "alice@company.com" }
 ```
-Коды: `200`, `400`, `404`.
+`DELETE /users/{id}` — удалить.
 
-#### `DELETE /users/{id}`
-Удалить пользователя. Коды: `204`, `404`.
+### Задачи (на пользователя)
 
----
+Статусы: `todo | doing | done`. Приоритет: `0..5` (по умолчанию `3`). `due_at` — ISO8601.
 
-### Задачи (привязаны к пользователю)
-
-Статусы: **`todo` | `doing` | `done`**.  
-Приоритет: целое число (**0..5**, по умолчанию `3`).  
-Дата срока: ISO8601, поле `due_at` (опционально).
-
-#### `GET /users/{user_id}/tasks`
-Список задач пользователя. Коды: `200`, `400`, `404`.
-
-#### `POST /users/{user_id}/tasks`
-Создать задачу.
-
-**Тело**
+`GET /users/{user_id}/tasks` — список.  
+`POST /users/{user_id}/tasks` — создать:
 ```json
 {
   "title": "Сделать отчёт",
@@ -142,41 +127,48 @@ go run ./cmd/taskmanager
   "due_at": "2025-09-05T18:00:00Z"
 }
 ```
-**Успех — 201 Created**
-```json
-{
-  "id": 10,
-  "user_id": {user_id},
-  "title": "Сделать отчёт",
-  "description": "К пятнице",
-  "status": "todo",
-  "priority": 3,
-  "due_at": "2025-09-05T18:00:00Z",
-  "created_at": "2025-08-30T12:00:00Z",
-  "updated_at": "2025-08-30T12:00:00Z"
-}
-```
-
-#### `GET /users/{user_id}/tasks/{task_id}`
-Получить задачу. Коды: `200`, `400`, `404`.
-
-#### `PUT /users/{user_id}/tasks/{task_id}`
-Полное обновление полей задачи. Коды: `200`, `400`, `404`.
-
-#### `PATCH /users/{user_id}/tasks/{task_id}`
-Частичное обновление (например, только `status` или `title`). Коды: `200`, `400`, `404`.
-
-#### `DELETE /users/{user_id}/tasks/{task_id}`
-Удалить задачу. Коды: `204`, `400`, `404`.
+`GET /users/{user_id}/tasks/{task_id}` — получить.  
+`PUT /users/{user_id}/tasks/{task_id}` — полное обновление.  
+`PATCH /users/{user_id}/tasks/{task_id}` — частичное обновление.  
+`DELETE /users/{user_id}/tasks/{task_id}` — удалить.
 
 ---
 
-## 🧪 Тестирование
+## 🔌 gRPC (Task Service) — кратко
+
+- Порт: **:50051**
+- Proto: `internal/taskmanager/proto/user.proto`
+- Метод: `UserService.HasUserWithEmail(EmailRequest) → UserExistsResponse`
+
+Генерация:
 ```bash
-go test ./...
+protoc --go_out=. --go-grpc_out=. internal/taskmanager/proto/user.proto
 ```
-- В проекте есть юнит‑тесты сервиса задач (`internal/service/task_test.go`).
-- Для репозитория задач предусмотрена генерация моков (`//go:generate mockgen` в `internal/storage/tasks_repo.go`).
+
+---
+
+## 🔔 Notification Service: привязка Telegram ↔ Task Manager
+
+**Назначение:** мгновенные уведомления и идентификация пользователя по email.
+
+**Как привязать аккаунт (5 шагов):**
+1. Найдите своего бота в Telegram и отправьте `/start`.
+2. Бот попросит email — пришлите адрес, который зарегистрирован в Task Service.
+3. Notification Service вызывает gRPC `HasUserWithEmail` в Task Service и проверяет наличие пользователя.
+4. Если пользователь найден — создаётся запись в БД: `telegram_bindings(email, chat_id)`, бот ответит «Привязка выполнена».
+5. Готово: при создании/изменении задач (и последующей интеграции с Kafka) вы будете получать уведомления в этот чат.
+
+**Webhook**
+- Endpoint: `POST /webhook` (ожидает Telegram Update).
+- Установка webhook (пример с ngrok):
+  ```bash
+  ngrok http 8081   # либо через ngrok-config.yml
+  curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook"        -d "url=https://<PUBLIC_HTTPS_URL>/webhook"
+  ```
+- Сброс:
+  ```bash
+  curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/deleteWebhook"
+  ```
 
 ---
 
@@ -184,37 +176,82 @@ go test ./...
 ```text
 .
 ├── cmd/
+│   ├── notification-service/
+│   │   ├── .env.example
+│   │   ├── env.go
+│   │   └── main.go
 │   └── taskmanager/
+│       ├── .env.example
+│       ├── env.go
 │       └── main.go
 ├── internal/
-│   ├── db/
-│   │   ├── postgres.go
-│   │   └── migrations/
-│   │       ├── 0001_create_users.sql
-│   │       ├── 0002_create_tasks.sql
-│   │       └── 0003_indexes.sql
-│   ├── entity/
-│   │   ├── user.go
-│   │   └── task.go
-│   ├── handlers/
-│   │   ├── users.go
-│   │   ├── tasks.go
-│   │   ├── router_users.go
-│   │   └── errors_tasks.go
-│   ├── service/
-│   │   ├── users.go
-│   │   ├── tasks.go
-│   │   └── task_test.go
-│   ├── storage/
-│   │   ├── users_repo.go
-│   │   └── tasks_repo.go
-│   └── mocks/
-│       └── mock_task_repo.go
-├── .env.example
+│   ├── notification-service/
+│   │   ├── db/
+│   │   │   ├── migrations/
+│   │   │   │   └── 0001_telegram_bindings.sql
+│   │   │   └── postgres.go
+│   │   ├── entity/
+│   │   │   └── telegram.go
+│   │   ├── handlers/
+│   │   │   ├── helpers.go
+│   │   │   └── webhook.go
+│   │   ├── notifyerrors/
+│   │   │   └── errors.go
+│   │   ├── senders/
+│   │   │   ├── payload.go
+│   │   │   └── telegram.go
+│   │   ├── service/
+│   │   │   └── binding_service.go
+│   │   ├── storage/
+│   │   │   └── telegram_binding_repo.go
+│   │   └── taskclient/
+│   │       ├── client.go
+│   │       └── grpc.go
+│   └── taskmanager/
+│       ├── db/
+│       │   ├── migrations/
+│       │   │   ├── 0001_create_users.sql
+│       │   │   ├── 0002_create_tasks.sql
+│       │   │   └── 0003_indexes.sql
+│       │   └── postgres.go
+│       ├── entity/
+│       │   ├── task.go
+│       │   └── user.go
+│       ├── grpcs/
+│       │   └── server.go
+│       ├── handlers/
+│       │   ├── errors_tasks.go
+│       │   ├── helpers.go
+│       │   ├── router_users.go
+│       │   ├── tasks.go
+│       │   └── users.go
+│       ├── mocks/
+│       │   └── mock_task_repo.go
+│       ├── proto/
+│       │   ├── user.pb.go
+│       │   ├── user.proto
+│       │   └── user_grpc.pb.go
+│       ├── service/
+│       │   ├── task_test.go
+│       │   ├── tasks.go
+│       │   └── users.go
+│       └── storage/
+│           ├── tasks_repo.go
+│           └── users_repo.go
 ├── .gitignore
+├── README.md
 ├── go.mod
 └── go.sum
 ```
+
+---
+
+## 🧪 Тестирование
+```bash
+go test ./...
+```
+- Юнит‑тесты: `internal/taskmanager/service/task_test.go`
+- Моки: `mockgen` для репозиториев.
 
 ---
 
@@ -235,6 +272,12 @@ go test ./...
 - `priority INT NOT NULL DEFAULT 0`
 - `due_date TIMESTAMPTZ`
 - `created_at`, `updated_at`
-- индексы по `user_id`, `user_id,status`, частичный индекс для активных задач
+- индексы: `user_id`, `(user_id,status)`, частичный индекс для активных
+
+**telegram_bindings** (Notification Service)
+- `email TEXT PRIMARY KEY`
+- `chat_id BIGINT NOT NULL`
 
 ---
+
+**GitHub:** https://github.com/HDBOOMONE12/TaskManager

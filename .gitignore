@@ -24,6 +24,9 @@ tmp/
 cmd/taskmanager/.env
 cmd/taskmanager/.env.example
 !cmd/taskmanager/.env.example
+cmd/notification-service/.env
+ngrok-config.yml
+project.zip
 
 # DB data
 pgdata/

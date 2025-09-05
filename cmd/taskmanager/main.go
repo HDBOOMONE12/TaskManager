@@ -4,10 +4,14 @@ import (
 	"context"
 	"errors"
 	"github.com/HDBOOMONE12/TaskManager/internal/taskmanager/db"
+	"github.com/HDBOOMONE12/TaskManager/internal/taskmanager/grpcs"
 	handlers2 "github.com/HDBOOMONE12/TaskManager/internal/taskmanager/handlers"
+	userspb "github.com/HDBOOMONE12/TaskManager/internal/taskmanager/proto"
 	service2 "github.com/HDBOOMONE12/TaskManager/internal/taskmanager/service"
 	storage2 "github.com/HDBOOMONE12/TaskManager/internal/taskmanager/storage"
+	"google.golang.org/grpc"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -29,6 +33,25 @@ func main() {
 
 	userSvc := service2.NewUserService(userRepo)
 	taskSvc := service2.NewTaskService(taskRepo)
+
+	gServer := &grpcs.GrpcServer{
+		UserService: userSvc,
+	}
+	grpcServer := grpc.NewServer()
+
+	userspb.RegisterUserServiceServer(grpcServer, gServer)
+
+	lis, err := net.Listen("tcp", ":50051")
+
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	go func() {
+		if err := grpcServer.Serve(lis); err != nil {
+			log.Fatalf("failed to serve gRPC: %v", err)
+		}
+	}()
 
 	handlers2.SetUserService(userSvc)
 	handlers2.SetTaskService(taskSvc)
@@ -67,7 +90,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	err := srv.Shutdown(ctx)
+	err = srv.Shutdown(ctx)
 	switch {
 	case err == nil:
 		log.Printf("graceful shutdown complete")

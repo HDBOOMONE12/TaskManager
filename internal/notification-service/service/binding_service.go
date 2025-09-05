@@ -9,10 +9,10 @@ import (
 
 type BindingService struct {
 	repo       *storage.TelegramBindingRepo
-	taskClient *taskclient.TaskClient
+	taskClient *taskclient.TaskGRPCClient
 }
 
-func NewBindingService(repo *storage.TelegramBindingRepo, taskClient *taskclient.TaskClient) *BindingService {
+func NewBindingService(repo *storage.TelegramBindingRepo, taskClient *taskclient.TaskGRPCClient) *BindingService {
 	return &BindingService{repo: repo, taskClient: taskClient}
 }
 
